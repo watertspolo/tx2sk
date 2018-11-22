@@ -3,6 +3,7 @@
 *py~
 *.pth
 __pycache__
+Models/*
 HDGAN/__pycache__
 Evaluation/inception_score/inception_finetuned_models
 Evaluation/inception_score/inception/__pycache__
