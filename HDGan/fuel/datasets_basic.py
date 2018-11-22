@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import pickle
 import random
@@ -21,8 +22,8 @@ def resize_images(tensor, shape):
 
 class Dataset(object):
     def __init__(self, workdir, img_size, batch_size, n_embed, mode='train'):
-        
-       
+
+
         if img_size in [256, 512]:
             self.image_filename = '/304images.pickle'
             self.output_res = [64, 128, 256]
@@ -52,7 +53,7 @@ class Dataset(object):
         print('\t {} samples (batch_size = {})'.format(self._num_examples, self.batch_size))
         print('\t {} output resolutions'.format(self.output_res))
         print ('\t {} embeddings used'.format(n_embed))
-        
+
     def get_data(self, pickle_path):
         with open(pickle_path + self.image_filename, 'rb') as f:
             images = pickle.load(f)
@@ -80,28 +81,28 @@ class Dataset(object):
             self.class_id = np.array(class_id)
 
         self._num_examples = len(self.images)
-        
+
     def readCaptions(self, filenames, class_id):
         name = filenames
         if name.find('jpg/') != -1:  # flowers dataset
             class_name = 'class_{0:05d}/'.format(class_id)
             name = name.replace('jpg/', class_name)
         cap_path = '{}/text_c10/{}.txt'.format(self.workdir, name)
-        
+
         with open(cap_path, "r") as f:
             captions = f.read().split('\n')
         captions = [cap for cap in captions if len(cap) > 0]
         return captions
 
     def transform(self, images):
-        
+
         transformed_images = np.zeros([images.shape[0], self.imsize, self.imsize, 3])
         ori_size = images.shape[1]
         # if ori_size < self.imsize:
         #     ori_size = int(self.imsize * (304/256))
         #     images = resize_images(images, shape=[ori_size, ori_size])
 
-        for i in range(images.shape[0]):    
+        for i in range(images.shape[0]):
             if self.train_mode:
                 h1 = int( np.floor((ori_size - self.imsize) * np.random.random()) )
                 w1 = int( np.floor((ori_size - self.imsize) * np.random.random()) )
@@ -137,31 +138,31 @@ class Dataset(object):
                 else:
                     e_sample = embeddings[i, randix, :]
                     e_mean = np.mean(e_sample, axis=0)
-                    
+
                     sampled_embeddings.append(e_mean)
             sampled_embeddings_array = np.array(sampled_embeddings)
-            
+
             return np.squeeze(sampled_embeddings_array), sampled_captions
 
     def get_index(self):
 
         start = self._train_index
         self._train_index += self.batch_size
-        
+
         if (self._train_index+self.batch_size) > self._num_examples:
             np.random.shuffle(self._perm)
             start = 0
         end = start + self.batch_size
-        
+
         return start, end
-        
+
     def __iter__(self):
         return self
 
     def __next__(self):
         """Return the next `batch_size` examples from this data set."""
 
-        n_embed = self.n_embed 
+        n_embed = self.n_embed
         # shuffle
         start, end = self.get_index()
 
@@ -170,7 +171,7 @@ class Dataset(object):
 
         collision_flag = (self.class_id[current_ids] == self.class_id[fake_ids])
         fake_ids[collision_flag] = (fake_ids[collision_flag] + np.random.randint(100, 200)) % self._num_examples
-        
+
         images_dict = OrderedDict()
         wrongs_dict = OrderedDict()
 
@@ -182,7 +183,7 @@ class Dataset(object):
         sampled_wrong_images = self.transform(sampled_wrong_images)
         images_dict = {}
         wrongs_dict = {}
-        
+
         for size in self.output_res:
             tmp = resize_images(sampled_images, shape=[size, size]).transpose((0,3,1,2))
             tmp = tmp * (2. / 255) - 1.
@@ -202,13 +203,13 @@ class Dataset(object):
         ret_list.append(sampled_captions)
 
         ret_list.append(filenames)
-        
+
         return ret_list
 
     def next_batch_test(self, max_captions=1):
         """Return the next `batch_size` examples from this data set."""
         batch_size = self.batch_size
-        
+
         start = self._text_index
         if (start + batch_size) > self._num_examples:
             end = self._num_examples
@@ -220,11 +221,11 @@ class Dataset(object):
         sampled_images = self.images[start:end].astype(np.float32)
         sampled_images = self.transform(sampled_images)
         sampled_images = sampled_images * (2. / 255) - 1.
-        
+
         sampled_embeddings = self.embeddings[start:end]
         _, embedding_num, _ = sampled_embeddings.shape
         sampled_embeddings_batchs = []
-        
+
         sampled_captions = []
         sampled_filenames = self.filenames[start:end]
         sampled_class_id = self.class_id[start:end]

@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-import numpy as np
 import argparse
+import torch
+# from logging import StreamHandler, DEBUG, Formatter, FileHandler, getLogger
 import os
 import sys
-import torch
-import h5py
 sys.path.insert(0, os.path.join('..', '..'))
 
 proj_root = os.path.join('..', '..')
@@ -24,18 +23,29 @@ from HDGan.fuel.datasets import Dataset
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Gans')
 
-    parser.add_argument('--reuse_weights',   action='store_true',
+    parser.add_argument('--data_dir', type=str,
+                        default='/home/shigaki/Data', help='data directory')
+    parser.add_argument('--img_dir', type=str,
+                        default='images/MSCOCO_2017train_sketch', help='imgdata directory')
+    parser.add_argument('--cap_name', type=str,
+                        default='cocohuman_2017', help='cap dirctory--Data/STAIR-Caption/inter/()')
+    parser.add_argument('--embedding_filename', type=str,
+                        default='cap_vec_human.hdf5', help='embedding filename')
+
+    parser.add_argument('--reuse_weights', action='store_true',
                         default=False, help='continue from last checkout point')
     parser.add_argument('--load_from_epoch', type=int,
                         default=0,  help='load from epoch')
 
     parser.add_argument('--batch_size', type=int,
-                        default=16, metavar='N', help='batch size.')
+                        default=8, metavar='N', help='batch size.')
+    parser.add_argument('--sent_dim', type=int,
+                        default=2400, metavar='N', help='dimention of skip-thought vectors')
     parser.add_argument('--device_id',  type=int,
                         default=0,  help='which device')
 
-    parser.add_argument('--model_name', type=str,      default=None)
-    parser.add_argument('--dataset',    type=str,      default=None,
+    parser.add_argument('--model_name', type=str,      default='sketch_human256')
+    parser.add_argument('--dataset',    type=str,      default='coco',
                         help='which dataset to use [birds or flowers]')
 
     parser.add_argument('--num_resblock', type=int, default=1,
@@ -55,9 +65,12 @@ if __name__ == '__main__':
                         help='how frequent to save the model')
     parser.add_argument('--display_freq', type=int, default=200, metavar='N',
                         help='plot the results every {} batches')
-    parser.add_argument('--verbose_per_iter', type=int, default=50,
+    parser.add_argument('--verbose_per_iter', type=int, default=200,
+                        help='save images per iteration')
+    parser.add_argument('--log_inter', type=int, default=40,
                         help='print losses per iteration')
-    parser.add_argument('--num_emb', type=int, default=4, metavar='N',
+
+    parser.add_argument('--num_emb', type=int, default=5, metavar='N',
                         help='number of emb chosen for each image during training.')
     parser.add_argument('--noise_dim', type=int, default=100, metavar='N',
                         help='the dimension of noise.')
@@ -67,25 +80,27 @@ if __name__ == '__main__':
                         help='The number of runs for each embeddings when testing')
     parser.add_argument('--KL_COE', type=float, default=4, metavar='N',
                         help='kl divergency coefficient.')
-    parser.add_argument('--visdom_port', type=int, default=8097,
-                        help='The port should be the same with the port when launching visdom')
-    parser.add_argument('--gpus', type=str, default='0', 
+    # parser.add_argument('--visdom_port', type=int, default=8097,
+    #                     help='The port should be the same with the port when launching visdom')
+    parser.add_argument('--gpus', type=str, default='0',
                         help='which gpu')
     # add more
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
     print(args)
-    
-    # Generator
+
+    '''Generator'''
     if args.finest_size <= 256:
-        netG = Generator(sent_dim=1024, noise_dim=args.noise_dim, emb_dim=128, hid_dim=128, num_resblock=1)      
+        netG = Generator(sent_dim=args.sent_dim, noise_dim=args.noise_dim, emb_dim=128, hid_dim=128, num_resblock=1)
     else:
+        # 512サイズの画像を生成する場合のモデル定義
         assert args.init_256generator_from != '', '256 generator need to be intialized'
         from HDGan.models.hd_networks import GeneratorSuperL1Loss
-        netG = GeneratorSuperL1Loss(sent_dim=1024, noise_dim=args.noise_dim, emb_dim=128, hid_dim=128, num_resblock=2, G256_weightspath=args.init_256generator_from)
-    # Discriminator
-    netD = Discriminator(num_chan=3, hid_dim=128, sent_dim=1024, emb_dim=128)
+        netG = GeneratorSuperL1Loss(sent_dim=args.sent_dim, noise_dim=args.noise_dim, emb_dim=128, hid_dim=128, num_resblock=2, G256_weightspath=args.init_256generator_from)
+    '''Discriminator'''
+    netD = Discriminator(num_chan=3, hid_dim=128, sent_dim=args.sent_dim, emb_dim=128)
 
+    '''GPU使用'''
     gpus = [a for a in range(len(args.gpus.split(',')))]
     torch.cuda.set_device(gpus[0])
     args.batch_size = args.batch_size * len(gpus)
@@ -99,15 +114,25 @@ if __name__ == '__main__':
         import torch.backends.cudnn as cudnn
         cudnn.benchmark = True
 
+    """訓練データ定義"""
     data_name = args.dataset
-    datadir = os.path.join(data_root, data_name)
+    datadir = args.data_dir
 
-    dataset_train = Dataset(datadir, img_size=args.finest_size,
-                            batch_size=args.batch_size, n_embed=args.num_emb, mode='train')
-    dataset_test = Dataset(datadir, img_size=args.finest_size,
-                           batch_size=args.batch_size, n_embed=1, mode='test')
+    dataset_train = Dataset(data_name, datadir, img_dir=args.img_dir, img_size=args.finest_size, batch_size=args.batch_size,
+                            cap_name=args.cap_name, emb_file=args.embedding_filename, n_embed=args.num_emb, mode='train')
+    # dataset_test = Dataset(datadir, img_size=args.finest_size,
+    #                        batch_size=args.batch_size, n_embed=1, mode='test')
+    # 今回はtrainだけでlossを表示するのでコメントアウトした
 
+    # for images, wrong_images, np_embeddings, _, _ in dataset_train:
+    #     for key in [64, 128, 256]:
+    #         print(images[key])
+    #         print(wrong_images[key])
+    #         print(np_embeddings[key])
+    #     break
+
+    """訓練開始"""
+    print('>> 訓練開始 ...')
     model_name = '{}_{}'.format(args.model_name, data_name)
 
-    print('>> Start training ...')
-    train_gans((dataset_train, dataset_test), model_root, model_name, netG, netD, args)
+    train_gans(dataset_train, model_root, model_name, netG, netD, args)  # (dataset_train, dataset_test) or (dataset_train)

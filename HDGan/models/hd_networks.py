@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,14 +15,14 @@ class condEmbedding(nn.Module):
 
         self.noise_dim = noise_dim
         self.emb_dim = emb_dim
-        self.linear  = nn.Linear(noise_dim, emb_dim*2)
+        self.linear = nn.Linear(noise_dim, emb_dim*2)
         self.relu = nn.LeakyReLU(0.2, inplace=True)
 
     def sample_encoded_context(self, mean, logsigma, kl_loss=False):
-    
+
         epsilon = Variable(torch.cuda.FloatTensor(mean.size()).normal_())
         stddev  = logsigma.exp()
-        
+
         return epsilon.mul(stddev).add_(mean)
 
     def forward(self, inputs, kl_loss=True):
@@ -29,17 +30,17 @@ class condEmbedding(nn.Module):
         inputs: (B, dim)
         return: mean (B, dim), logsigma (B, dim)
         '''
-        out = self.relu(self.linear(inputs))
-        mean = out[:, :self.emb_dim]
+        out = self.relu(self.linear(inputs))  # 2400 => 256
+        mean = out[:, :self.emb_dim]  # self.emb_dim = 128
         log_sigma = out[:, self.emb_dim:]
 
         c = self.sample_encoded_context(mean, log_sigma)
         return c, mean, log_sigma
 
-#-----------------------------------------------#
-#    used to encode image into feature maps     #
-#-----------------------------------------------#
 
+""""""""""""""""""""""""""""""""""""""""""
+'''画像の特徴マッピングのための Encoder モデル'''
+""""""""""""""""""""""""""""""""""""""""""
 class ImageDown(torch.nn.Module):
 
     def __init__(self, input_size, num_chan, out_dim):
@@ -93,6 +94,9 @@ class ImageDown(torch.nn.Module):
         return out
 
 
+""""""""""""""""""""""""""""""""""""""""""
+'''クラス分類タスクのモデル定義'''
+""""""""""""""""""""""""""""""""""""""""""
 class DiscClassifier(nn.Module):
     def __init__(self, enc_dim, emb_dim, kernel_size):
         """
@@ -166,25 +170,20 @@ class Sent2FeatMap(nn.Module):
         return output
 
 
-#----------------Define Generator and Discriminator-----------------------------#
-
+""""""""""""""""""""""""""""""""""""""""""
+'''Generator と Discriminator のモデル定義'''
+""""""""""""""""""""""""""""""""""""""""""
 class Generator(nn.Module):
     def __init__(self, sent_dim, noise_dim, emb_dim, hid_dim, num_resblock=1, side_output_at=[64, 128, 256]):
         """
         Parameters:
         ----------
-        sent_dim: int
-            the dimension of sentence embedding
-        noise_dim: int
-            the dimension of noise input
-        emb_dim : int
-            the dimension of compressed sentence embedding.
-        hid_dim: int
-            used to control the number of feature maps.
-        num_resblock: int
-            the scale factor of generator (see paper for explanation).
-        side_output_at:  list
-            contains local loss size for discriminator at scales.
+        sent_dim: int   ...文章ベクトルの次元数
+        noise_dim: int  ...Zノイズの次元数
+        emb_dim : int   ...次元圧縮後の文章embeddingの次元数
+        hid_dim: int    ...特徴マップの次元数を制御するための変数(1層目の畳込み数)
+        num_resblock: int   ...Generator のブロック数
+        side_output_at:  list   ...Discriminator のlocal損失のスケール
         """
 
         super(Generator, self).__init__()
@@ -244,9 +243,9 @@ class Generator(nn.Module):
         kl_loss: tensor
             Kullback–Leibler divergence loss from conditionining embedding
         """
-        
-        sent_random, mean, logsigma=self.condEmbedding(sent_embeddings)
-        
+
+        sent_random, mean, logsigma = self.condEmbedding(sent_embeddings)
+
         text = torch.cat([sent_random, z], dim=1)
         x = self.vec_to_tensor(text)
         x_4 = self.scale_4(x)
@@ -334,7 +333,7 @@ class Discriminator(torch.nn.Module):
             input image tensor
         embedding : (B, sent_dim)
             corresponding embedding
-        outptuts:  
+        outptuts:
         -----------
         out_dict: dict
             dictionary containing: pair discriminator output and image discriminator output
@@ -372,10 +371,10 @@ class GeneratorSuperL1Loss(nn.Module):
         super(GeneratorSuperL1Loss, self).__init__()
         self.__dict__.update(locals())
         print('>> Init a HDGAN 512Generator (resblock={})'.format(num_resblock))
-        
+
         norm_layer = functools.partial(nn.BatchNorm2d, affine=True)
         act_layer = nn.ReLU(True)
-        
+
         self.generator_256 = Generator(sent_dim, noise_dim, emb_dim, hid_dim)
         if G256_weightspath != '':
             print ('pre-load generator_256 from', G256_weightspath)
@@ -388,7 +387,7 @@ class GeneratorSuperL1Loss(nn.Module):
         seq = []
         for i in range(num_resblock):
             seq += [ResnetBlock(cur_dim)]
-        
+
         seq += [nn.Upsample(scale_factor=2, mode='nearest')]
         seq += [pad_conv_norm(cur_dim, cur_dim//2, norm_layer, activation=act_layer)]
         cur_dim = cur_dim // 2
@@ -398,20 +397,20 @@ class GeneratorSuperL1Loss(nn.Module):
         self.apply(weights_init)
 
     def parameters(self):
-        
+
         fixed = list(self.generator_256.parameters())
         all_params = list(self.parameters())
         partial_params = list(set(all_params) - set(fixed))
 
         print ('WARNING: fixed params {} training params {}'.format(len(fixed), len(partial_params)))
         print('          It needs modifications if you can train all from scratch')
-        
+
         return partial_params
 
     def forward(self, sent_embeddings, z):
 
         output_64, output_128, output_256, mean, logsigma = self.generator_256(sent_embeddings, z)
-        scale_256 = self.generator_256.keep_out_256.detach() 
+        scale_256 = self.generator_256.keep_out_256.detach()
         scale_512 = self.scale_512(scale_256)
         up_img_256 = F.upsample(output_256.detach(), (512,512), mode='bilinear')
 
