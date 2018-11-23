@@ -6,6 +6,7 @@ ENV DEBCONF_NOWARNINGS yes
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential curl git pkg-config apt-utils\
                                                python3 python3-dev python3-pip python3-setuptools cmake emacs
+RUN apt-get install bsdmainutils
 
 RUN pip3 install --upgrade pip
 

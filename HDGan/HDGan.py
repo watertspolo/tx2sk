@@ -295,7 +295,7 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
                 discriminator_loss += (pair_loss + img_loss)
 
                 '''epoch単位でlossをlog_dictに格納'''
-                if logcount == 0:
+                if it == args.log_inter:
                     pair_loss_num = to_numpy(pair_loss).mean()
                     log_dict['D'][key]['pair_loss'].append(pair_loss_num)
 
@@ -307,7 +307,7 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
             netD.zero_grad()  # 勾配初期化
 
             '''それぞれの画像サイズにおけるD_lossの平均を定義'''
-            if logcount == 0:
+            if it == args.log_inter:
                 a=[]
                 d_loss_val = to_numpy(discriminator_loss).mean()
                 log_dict['D']['all']['d_loss_val'].append(d_loss_val)
@@ -345,7 +345,7 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
                 img_loss = compute_g_loss(fake_img_logit_local, real_labels)
 
                 '''epoch単位でlossをlog_dictに格納'''
-                if logcount == 0:
+                if it == args.log_inter:
                     pair_loss_num = to_numpy(generator_loss).mean()
                     log_dict['G'][key]['pair_loss'].append(pair_loss_num)
 
@@ -353,7 +353,7 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
                 generator_loss += img_loss
 
                 '''epoch単位でlossをlog_dictに格納'''
-                if logcount == 0:
+                if it == args.log_inter:
                     img_loss_num = to_numpy(img_loss).mean()
                     log_dict['G'][key]['image_loss'].append(img_loss_num)
 
@@ -363,7 +363,7 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
             netG.zero_grad()  # 勾配初期化
 
             '''それぞれの画像サイズにおけるG_lossの平均を定義'''
-            if logcount == 0:
+            if it == args.log_inter:
                 g_loss_val = to_numpy(generator_loss).mean()
                 log_dict['G']['all']['g_loss_val'].append(g_loss_val)
 
@@ -387,7 +387,7 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
                               epoch, k, 'train_images', path=model_folder, model_name=model_name)
 
                 """lossの可視化(プロット)"""
-            if logcount == 0:
+            if it == args.log_inter:
                 '''dataframe生成'''
                 log_df_epoch = pd.DataFrame({'epoch': np.arange(start_epoch, tot_epoch)})
 
