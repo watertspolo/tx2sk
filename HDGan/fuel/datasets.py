@@ -4,7 +4,7 @@ from .datasets_multithread import COCODataset
 from .datasets_multithread import Dataset as BasicCOCODataset
 
 
-def Dataset(data_name, datadir, img_dir, img_size, batch_size, cap_name, emb_file, n_embed, mode, multithread=False):
+def Dataset(data_name, datadir, img_dir, img_size, batch_size, cap_name, emb_file, n_embed, mode, multithread=True):
 
     # we don't create multithread loader for bird and flower
     # because we need to make sure the `wrong' images should be in different classes
@@ -16,8 +16,8 @@ def Dataset(data_name, datadir, img_dir, img_size, batch_size, cap_name, emb_fil
             mode = 'val'
         if not multithread:
             # we do not need parallel in testing
-            print('mode = {}'.format(mode))
+            print('mode = {} Basic'.format(mode))
             return BasicCOCODataset(datadir, img_dir=img_dir, img_size=img_size, batch_size=batch_size, cap_name=cap_name, emb_file=emb_file, n_embed=n_embed, mode=mode)
         else:
             print('mode = {}'.format(mode))
-            return COCODataset(datadir, img_dir, img_size, batch_size, cap_name, emb_file, n_embed, mode, threads=1).load_data()
+            return COCODataset(datadir, img_dir, img_size, batch_size, cap_name, emb_file, n_embed, mode, threads=4).load_data()

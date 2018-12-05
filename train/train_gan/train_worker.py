@@ -8,7 +8,6 @@ sys.path.insert(0, os.path.join('..', '..'))
 
 proj_root = os.path.join('..', '..')
 data_root = os.path.join(proj_root, 'Data')
-model_root = os.path.join(proj_root, 'Models')
 
 import torch.nn as nn
 from collections import OrderedDict
@@ -24,9 +23,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Gans')
 
     parser.add_argument('--data_dir', type=str,
-                        default='/home/shigaki/Data', help='data directory')
+                        default='../../Data', help='data directory')
+    parser.add_argument('--model_dir', type=str,
+                        default='../../Models', help='model directory')
     parser.add_argument('--img_dir', type=str,
-                        default='images/MSCOCO_2017train_sketch', help='imgdata directory')
+                        default='images/MSCOCO_2017train/train2017', help='imgdata directory')
     parser.add_argument('--cap_name', type=str,
                         default='cocohuman_2017', help='cap dirctory--Data/STAIR-Caption/inter/()')
     parser.add_argument('--embedding_filename', type=str,
@@ -38,19 +39,19 @@ if __name__ == '__main__':
                         default=0,  help='load from epoch')
 
     parser.add_argument('--batch_size', type=int,
-                        default=8, metavar='N', help='batch size.')
+                        default=16, metavar='N', help='batch size.')
     parser.add_argument('--sent_dim', type=int,
                         default=2400, metavar='N', help='dimention of skip-thought vectors')
     parser.add_argument('--device_id',  type=int,
                         default=0,  help='which device')
 
-    parser.add_argument('--model_name', type=str,      default='sketch_human256')
+    parser.add_argument('--model_name', type=str,      default='image_human256v2')
     parser.add_argument('--dataset',    type=str,      default='coco',
                         help='which dataset to use [birds or flowers]')
 
     parser.add_argument('--num_resblock', type=int, default=1,
                         help='number of resblock in generator')
-    parser.add_argument('--epoch_decay', type=float, default=100,
+    parser.add_argument('--epoch_decay', type=float, default=50,
                         help='decay learning rate by half every epoch_decay')
     parser.add_argument('--finest_size', type=int, default=256,
                         metavar='N', help='target image size.')
@@ -88,6 +89,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
     print(args)
+    model_root = args.model_dir
 
     '''Generator'''
     if args.finest_size <= 256:

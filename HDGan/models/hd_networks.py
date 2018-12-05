@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from collections import OrderedDict
 from ..proj_utils.network_utils import *
+from ..proj_utils.spectral_norm import SpectralNorm
 import math
 import functools
 
@@ -65,26 +66,26 @@ class ImageDown(torch.nn.Module):
         # use large kernel_size at the end to prevent using zero-padding and stride
         if input_size == 64:
             cur_dim = 128
-            _layers += [conv_norm(num_chan, cur_dim, norm_layer, stride=2, activation=activ, use_norm=False)]  # 32
-            _layers += [conv_norm(cur_dim, cur_dim*2, norm_layer, stride=2, activation=activ)]  # 16
-            _layers += [conv_norm(cur_dim*2, cur_dim*4, norm_layer, stride=2, activation=activ)]  # 8
-            _layers += [conv_norm(cur_dim*4, out_dim,  norm_layer, stride=1, activation=activ, kernel_size=5, padding=0)]  # 4
+            _layers += [conv_norms(num_chan, cur_dim, norm_layer, stride=2, activation=activ, use_norm=False)]  # 32
+            _layers += [conv_norms(cur_dim, cur_dim*2, norm_layer, stride=2, activation=activ)]  # 16
+            _layers += [conv_norms(cur_dim*2, cur_dim*4, norm_layer, stride=2, activation=activ)]  # 8
+            _layers += [conv_norms(cur_dim*4, out_dim,  norm_layer, stride=1, activation=activ, kernel_size=5, padding=0)]  # 4
 
         if input_size == 128:
             cur_dim = 64
-            _layers += [conv_norm(num_chan, cur_dim, norm_layer, stride=2, activation=activ, use_norm=False)]  # 64
-            _layers += [conv_norm(cur_dim, cur_dim*2, norm_layer, stride=2, activation=activ)]  # 32
-            _layers += [conv_norm(cur_dim*2, cur_dim*4, norm_layer, stride=2, activation=activ)]  # 16
-            _layers += [conv_norm(cur_dim*4, cur_dim*8, norm_layer, stride=2, activation=activ)]  # 8
-            _layers += [conv_norm(cur_dim*8, out_dim,  norm_layer, stride=1, activation=activ, kernel_size=5, padding=0)]  # 4
+            _layers += [conv_norms(num_chan, cur_dim, norm_layer, stride=2, activation=activ, use_norm=False)]  # 64
+            _layers += [conv_norms(cur_dim, cur_dim*2, norm_layer, stride=2, activation=activ)]  # 32
+            _layers += [conv_norms(cur_dim*2, cur_dim*4, norm_layer, stride=2, activation=activ)]  # 16
+            _layers += [conv_norms(cur_dim*4, cur_dim*8, norm_layer, stride=2, activation=activ)]  # 8
+            _layers += [conv_norms(cur_dim*8, out_dim,  norm_layer, stride=1, activation=activ, kernel_size=5, padding=0)]  # 4
 
         if input_size == 256:
             cur_dim = 32 # for testing
-            _layers += [conv_norm(num_chan, cur_dim, norm_layer, stride=2, activation=activ, use_norm=False)] # 128
-            _layers += [conv_norm(cur_dim, cur_dim*2,  norm_layer, stride=2, activation=activ)] # 64
-            _layers += [conv_norm(cur_dim*2, cur_dim*4,  norm_layer, stride=2, activation=activ)] # 32
-            _layers += [conv_norm(cur_dim*4, cur_dim*8,  norm_layer, stride=2, activation=activ)] # 16
-            _layers += [conv_norm(cur_dim*8, out_dim,  norm_layer, stride=2, activation=activ)] # 8
+            _layers += [conv_norms(num_chan, cur_dim, norm_layer, stride=2, activation=activ, use_norm=False)] # 128
+            _layers += [conv_norms(cur_dim, cur_dim*2,  norm_layer, stride=2, activation=activ)] # 64
+            _layers += [conv_norms(cur_dim*2, cur_dim*4,  norm_layer, stride=2, activation=activ)] # 32
+            _layers += [conv_norms(cur_dim*4, cur_dim*8,  norm_layer, stride=2, activation=activ)] # 16
+            _layers += [conv_norms(cur_dim*8, out_dim,  norm_layer, stride=2, activation=activ)] # 8
 
         self.node = nn.Sequential(*_layers)
 
@@ -116,8 +117,8 @@ class DiscClassifier(nn.Module):
         activ = nn.LeakyReLU(0.2, True)
         inp_dim = enc_dim + emb_dim
 
-        _layers = [conv_norm(inp_dim, enc_dim, norm_layer, kernel_size=1, stride=1, activation=activ),
-                   nn.Conv2d(enc_dim, 1, kernel_size=kernel_size, padding=0, bias=True)]
+        _layers = [conv_norms(inp_dim, enc_dim, norm_layer, kernel_size=1, stride=1, activation=activ),
+                   SpectralNorm(nn.Conv2d(enc_dim, 1, kernel_size=kernel_size, padding=0, bias=True))]
 
         self.node = nn.Sequential(*_layers)
 
@@ -157,7 +158,7 @@ class Sent2FeatMap(nn.Module):
         super(Sent2FeatMap, self).__init__()
         self.__dict__.update(locals())
         out_dim = row*col*channel
-        norm_layer = functools.partial(nn.BatchNorm1d, affine=True)
+        norm_layer = functools.partial(nn.BatchNorm1d)
         _layers = [nn.Linear(in_dim, out_dim)]
         _layers += [norm_layer(out_dim)]
         if activ is not None:
@@ -297,7 +298,7 @@ class Discriminator(torch.nn.Module):
         if 64 in side_output_at:  # discriminator for 64 input
             self.img_encoder_64 = ImageDown(64,  num_chan,  enc_dim)  # 4x4
             self.pair_disc_64 = DiscClassifier(enc_dim, emb_dim, kernel_size=4)
-            self.local_img_disc_64 = nn.Conv2d(enc_dim, 1, kernel_size=4, padding=0, bias=True)
+            self.local_img_disc_64 = SpectralNorm(nn.Conv2d(enc_dim, 1, kernel_size=4, padding=0, bias=True))
             _layers = [nn.Linear(sent_dim, emb_dim), activ]
             self.context_emb_pipe_64 = nn.Sequential(*_layers)
 
@@ -305,7 +306,7 @@ class Discriminator(torch.nn.Module):
             self.img_encoder_128 = ImageDown(128,  num_chan, enc_dim)  # 4x4
             self.pair_disc_128 = DiscClassifier(
                 enc_dim, emb_dim, kernel_size=4)
-            self.local_img_disc_128 = nn.Conv2d(enc_dim, 1, kernel_size=4, padding=0, bias=True)
+            self.local_img_disc_128 = SpectralNorm(nn.Conv2d(enc_dim, 1, kernel_size=4, padding=0, bias=True))
             # map sentence to a code of length emb_dim
             _layers = [nn.Linear(sent_dim, emb_dim), activ]
             self.context_emb_pipe_128 = nn.Sequential(*_layers)
@@ -313,9 +314,9 @@ class Discriminator(torch.nn.Module):
         if 256 in side_output_at:  # discriminator for 256 input
             self.img_encoder_256 = ImageDown(256, num_chan, enc_dim)     # 8x8
             self.pair_disc_256 = DiscClassifier(enc_dim, emb_dim, kernel_size=4)
-            self.pre_encode = conv_norm(enc_dim, enc_dim, norm_layer, stride=1, activation=activ, kernel_size=5, padding=0)
+            self.pre_encode = conv_norms(enc_dim, enc_dim, norm_layer, stride=1, activation=activ, kernel_size=5, padding=0)
             # never use 1x1 convolutions as the image disc classifier
-            self.local_img_disc_256 = nn.Conv2d(enc_dim, 1, kernel_size=4, padding=0, bias=True)
+            self.local_img_disc_256 = SpectralNorm(nn.Conv2d(enc_dim, 1, kernel_size=4, padding=0, bias=True))
             # map sentence to a code of length emb_dim
             _layers = [nn.Linear(sent_dim, emb_dim), activ]
             self.context_emb_pipe_256 = nn.Sequential(*_layers)

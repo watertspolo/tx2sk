@@ -90,17 +90,20 @@ def compute_g_loss(fake_logit, real_labels):
 #     plot_img(X=tmpX, win='{}_{}.png'.format(name, typ), env=model_name)
 
 
-def save_imgs(samples, fake_samples, epoch, typ, name, path, model_name=None):
+def save_timgs(samples, typ, name, path, model_name=None):
     samples = torch.Tensor(samples)
     # print(sample.shape)
     save_image(samples,
                os.path.join(path,
-                            '{}_epoch{}_{}.png'.format(name, epoch, typ)),
+                            '{}_{}.png'.format(name, typ)),
                normalize=True, range=(-1, 1))
     # fake_samples = fake_samples.data.cpu()
+
+
+def save_imgs(fake_samples, epoch, typ, name, path, model_name=None):
     save_image(fake_samples.data,
                os.path.join(path,
-                            '{}(fake)_epoch{}_{}.png'.format(name, epoch, typ)),
+                            '{}_fake_epoch{}_{}.png'.format(name, epoch, typ)),
                normalize=True, range=(-1, 1))
 
 
@@ -150,7 +153,9 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
     updates_per_epoch = int(dataset._num_examples / args.batch_size)
 
     """optimizerの設定"""
-    optimizerD = optim.Adam(netD.parameters(), lr=d_lr, betas=(0.5, 0.999))
+    parameters_D = filter(lambda x: x.requires_grad, netD.parameters())
+    optimizerD = optim.Adam(parameters_D, lr=d_lr, betas=(0.5, 0.999))
+    # optimizerD = optim.Adam(netD.parameters(), lr=d_lr, betas=(0.5, 0.999))
     optimizerG = optim.Adam(netG.parameters(), lr=g_lr, betas=(0.5, 0.999))
 
     """途中から訓練を再開する場合"""
@@ -381,9 +386,13 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
                             100.*((it*args.batch_size)/(updates_per_epoch*args.batch_size)),
                             g_lr, g_loss_val, d_loss_val))
 
+            if it == args.log_inter:
+                for k, sample in fake_images.items():
+                    save_timgs(images[k],
+                               k, 'train_images', path=model_folder, model_name=model_name)
             if it % args.verbose_per_iter == 0:
                 for k, sample in fake_images.items():
-                    save_imgs(images[k], sample,
+                    save_imgs(sample,
                               epoch, k, 'train_images', path=model_folder, model_name=model_name)
 
                 """lossの可視化(プロット)"""
@@ -441,8 +450,9 @@ def train_gans(dataset, model_root, model_name, netG, netD, args):
                 fig.patch.set_facecolor('white')
 
                 plt.xlabel('epoch')
-                plt.plot(epochs, train_D, 'ro', label='D_loss')
-                plt.plot(epochs, train_G, 'bo', label='G_loss')
+                plt.ylabel('Loss')
+                plt.plot(epochs, train_D, label='D_loss')
+                plt.plot(epochs, train_G, label='G_loss')
                 plt.title('Training loss ({})'.format(model_name))
                 plt.legend()
                 if os.path.exists(os.path.join(model_root, model_name, 'Training loss {}.jpg'.format(model_name))):

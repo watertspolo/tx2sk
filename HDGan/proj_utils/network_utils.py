@@ -7,16 +7,19 @@ from torch.autograd import Variable
 from collections import deque, OrderedDict
 import functools
 from .torch_utils import *
+from ..proj_utils.spectral_norm import SpectralNorm
 
 ## Weights init function, DCGAN use 0.02 std
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         if hasattr(m, 'weight'):
-            m.weight.data.normal_(0.0, 0.02)
+            # m.weight.normal_(0.0, 0.02)
+            m.weight.data.normal_(0.0, 0.02)  # 2018.11.30
     elif classname.find('BatchNorm') != -1:
         # Estimated variance, must be around 1
-        m.weight.data.normal_(1.0, 0.02)
+        # m.weight.normal_(1.0, 0.02)
+        m.weight.data.normal_(1.0, 0.02)  # 2018.11.30
         # Estimated mean, must be around 0
         m.bias.data.fill_(0)
 
@@ -84,6 +87,24 @@ def conv_norm(dim_in, dim_out, norm_layer, kernel_size=3, stride=1, use_activati
            ]
     if use_norm:
         seq += [norm_layer(dim_out)]
+    if use_activation:
+        seq += [activation]
+
+    return nn.Sequential(*seq)
+
+def conv_norms(dim_in, dim_out, norm_layer, kernel_size=3, stride=1, use_activation=True,
+              use_bias=False, activation=nn.ReLU(True), use_norm=True, padding=None):
+    # designed for discriminator
+
+    if kernel_size == 3:
+        padding = 1 if padding is None else padding
+    else:
+        padding = 0 if padding is None else padding
+
+    seq = [SpectralNorm(nn.Conv2d(dim_in, dim_out, kernel_size=kernel_size, padding=padding, bias=use_bias, stride=stride)),
+           ]
+    # if use_norm:
+    #     seq += [norm_layer(dim_out)]
     if use_activation:
         seq += [activation]
 
